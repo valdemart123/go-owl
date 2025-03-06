@@ -9,6 +9,22 @@ import (
 	"strings"
 )
 
+// Run starts the CLI tool
+func Run() {
+	if len(os.Args) < 2 {
+		fmt.Println("Usage: owl <command>\nAvailable commands:\n  setup  Install or update required browser drivers")
+		os.Exit(1)
+	}
+
+	switch os.Args[1] {
+	case "setup":
+		setup()
+	default:
+		fmt.Println("Unknown command:", os.Args[1])
+		os.Exit(1)
+	}
+}
+
 // setup installs necessary browser drivers and updates them if needed.
 func setup() {
 	fmt.Println("Setting up Owl Automation Framework...")
@@ -185,19 +201,4 @@ func downloadAndExtract(url, outputPath string) error {
 		return err
 	}
 	return nil
-}
-
-func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: owl <command>\nAvailable commands:\n  setup  Install or update required browser drivers")
-		os.Exit(1)
-	}
-
-	switch os.Args[1] {
-	case "setup":
-		setup()
-	default:
-		fmt.Println("Unknown command:", os.Args[1])
-		os.Exit(1)
-	}
 }
