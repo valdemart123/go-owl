@@ -64,7 +64,12 @@ func getInstalledChromeVersion() string {
 	case "darwin":
 		cmd = exec.Command("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "--version")
 	case "linux":
-		cmd = exec.Command("google-chrome", "--version")
+		cmd = exec.Command("which", "google-chrome-stable")
+		if err := cmd.Run(); err == nil {
+			cmd = exec.Command("google-chrome-stable", "--version")
+		} else {
+			cmd = exec.Command("google-chrome", "--version")
+		}
 	case "windows":
 		cmd = exec.Command("powershell", "(Get-Item 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe').VersionInfo.FileVersion")
 	default:
@@ -85,9 +90,14 @@ func getInstalledChromeVersion() string {
 	return "Unknown"
 }
 
-// getLatestChromeVersion fetches the latest stable Chrome version from Google's API.
+// getLatestChromeVersion fetches the latest stable Chrome version.
 func getLatestChromeVersion() string {
-	cmd := exec.Command("sh", "-c", "curl -s https://chromedriver.storage.googleapis.com/LATEST_RELEASE")
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("powershell", "-Command", "(Invoke-WebRequest -Uri https://chromedriver.storage.googleapis.com/LATEST_RELEASE).Content.Trim()")
+	} else {
+		cmd = exec.Command("sh", "-c", "curl -s https://chromedriver.storage.googleapis.com/LATEST_RELEASE")
+	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Fatal("Failed to fetch the latest Chrome version:", err)
@@ -95,7 +105,7 @@ func getLatestChromeVersion() string {
 	return strings.TrimSpace(string(output))
 }
 
-// updateChrome attempts to update Chrome on supported platforms.
+// updateChrome updates Chrome if needed.
 func updateChrome() {
 	switch runtime.GOOS {
 	case "darwin":
@@ -106,13 +116,13 @@ func updateChrome() {
 			log.Fatal("Failed to update Chrome:", err)
 		}
 	case "windows":
-		fmt.Println("To update Chrome on Windows, visit https://www.google.com/chrome/")
+		fmt.Println("Chrome does not support automatic updates via CLI. Please update manually: https://www.google.com/chrome/")
 	default:
 		log.Fatal("Unsupported OS for automatic Chrome updates.")
 	}
 }
 
-// installFirefoxDriver automatically downloads and installs/upgrades Geckodriver.
+// installFirefoxDriver installs or updates Geckodriver.
 func installFirefoxDriver() {
 	fmt.Println("Checking Geckodriver version...")
 
@@ -129,25 +139,14 @@ func installFirefoxDriver() {
 	fmt.Println("Geckodriver updated successfully.")
 }
 
-// installWebkitDriver enables Safari WebDriver (only for macOS).
-func installWebkitDriver() {
-	if runtime.GOOS != "darwin" {
-		fmt.Println("WebKit (Safari) automation is only supported on macOS.")
-		return
-	}
-
-	fmt.Println("Enabling Safari WebDriver...")
-	cmd := exec.Command("safaridriver", "--enable")
-	if err := cmd.Run(); err != nil {
-		log.Fatal("Failed to enable Safari WebDriver:", err)
-	}
-
-	fmt.Println("Safari WebDriver enabled.")
-}
-
 // getInstalledGeckoDriverVersion checks the installed version of Geckodriver.
 func getInstalledGeckoDriverVersion() string {
-	cmd := exec.Command("geckodriver", "--version")
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("powershell", "-Command", "(Get-Command geckodriver).Source")
+	} else {
+		cmd = exec.Command("geckodriver", "--version")
+	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "Not Installed"
@@ -162,12 +161,33 @@ func getInstalledGeckoDriverVersion() string {
 
 // getLatestGeckoDriverVersion fetches the latest Geckodriver version from GitHub.
 func getLatestGeckoDriverVersion() string {
-	cmd := exec.Command("sh", "-c", "curl -s https://api.github.com/repos/mozilla/geckodriver/releases/latest | grep 'tag_name' | cut -d '\"' -f 4")
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("powershell", "-Command", "(Invoke-WebRequest -Uri 'https://api.github.com/repos/mozilla/geckodriver/releases/latest').Content | ConvertFrom-Json | Select-Object -ExpandProperty tag_name")
+	} else {
+		cmd = exec.Command("sh", "-c", "curl -s https://api.github.com/repos/mozilla/geckodriver/releases/latest | grep 'tag_name' | cut -d '\"' -f 4")
+	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Fatal("Failed to fetch latest Geckodriver version:", err)
 	}
 	return strings.TrimSpace(string(output))
+}
+
+// installWebkitDriver enables Safari WebDriver (only for macOS).
+func installWebkitDriver() {
+	if runtime.GOOS != "darwin" {
+		fmt.Println("WebKit (Safari) automation is only supported on macOS.")
+		return
+	}
+
+	fmt.Println("Enabling Safari WebDriver...")
+	cmd := exec.Command("safaridriver", "--enable")
+	if err := cmd.Run(); err != nil {
+		log.Fatal("Failed to enable Safari WebDriver:", err)
+	}
+
+	fmt.Println("Safari WebDriver enabled.")
 }
 
 // downloadAndInstallGeckoDriver downloads and installs the latest Geckodriver version.
@@ -196,7 +216,15 @@ func downloadAndInstallGeckoDriver(version string) {
 
 // downloadAndExtract downloads a file and extracts it if needed.
 func downloadAndExtract(url, outputPath string) error {
-	cmd := exec.Command("sh", "-c", fmt.Sprintf("curl -L %s -o /tmp/driver && tar -xzf /tmp/driver -C /usr/local/bin && chmod +x %s", url, outputPath))
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("powershell", "-Command", fmt.Sprintf(
+			"$url='%s'; $output='%s'; Invoke-WebRequest -Uri $url -OutFile $output; Expand-Archive -Path $output -DestinationPath '%s' -Force",
+			url, outputPath+".zip", outputPath,
+		))
+	} else {
+		cmd = exec.Command("sh", "-c", fmt.Sprintf("curl -L %s -o /tmp/driver && tar -xzf /tmp/driver -C /usr/local/bin && chmod +x %s", url, outputPath))
+	}
 	if err := cmd.Run(); err != nil {
 		return err
 	}
